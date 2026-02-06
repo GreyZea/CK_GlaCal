@@ -9,7 +9,7 @@ def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if not st.session_state.authenticated:
-        st.title("🔒 GlaCal Master (Stock Optimization)")
+        st.title("🔒 CK_GlaCal (Stock Optimization)")
         pwd = st.text_input("กรุณาใส่รหัสผ่าน", type="password")
         if st.button("เข้าสู่ระบบ"):
             if pwd == PASSWORD:
