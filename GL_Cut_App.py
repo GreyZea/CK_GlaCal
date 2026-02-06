@@ -28,43 +28,47 @@ def run_simulation(stocks, pieces, allowance, trials=50):
     best_overall_results = None
     min_total_waste = float('inf')
 
-    # แสดง progress bar เพื่อให้ผู้ใช้รู้ว่ากำลังคำนวณหลายรอบ
-    progress_text = "กำลังจำลองรูปแบบการวางที่คุ้มที่สุด..."
+    progress_text = "กำลังค้นหารูปแบบการวางที่ประหยัดที่สุด..."
     my_bar = st.progress(0, text=progress_text)
 
     for trial in range(trials):
-        # สลับลำดับชิ้นงานเพื่อหาความเป็นไปได้ใหม่ๆ (Statistical Shuffle)
         current_pieces = pieces.copy()
-        random.shuffle(current_pieces)
+        random.shuffle(current_pieces)  # สลับลำดับเพื่อหาทางเลือกใหม่ๆ
 
-        temp_packer = newPacker(
+        # ใช้ Packer พร้อมตั้งค่า Algorithm มาตรฐาน
+        # bin_algo=1 คือ BAF (Best Area Fit) ตามเอกสาร rectpack
+        packer_engine = newPacker(
             mode=packer.PackingMode.Offline,
-            bin_algo=packer.PackingBin.Baf,  # Best Area Fit
+            bin_algo=packer.PackingBin.BBF,  # เปลี่ยนเป็น BBF (Best Bin Fit) ที่เสถียรกว่า
             pack_algo=packer.MaxRectsBssf,
             rotation=True
         )
 
-        # ใส่แผ่นคลัง (เรียงแผ่นเล็กไปใหญ่เพื่อให้เลือกใช้แผ่นที่ฟิตก่อน)
+        # ใส่แผ่นคลัง (เรียงจากเล็กไปใหญ่เพื่อให้ลองใช้แผ่นเล็กเก็บงานก่อน)
         sorted_stocks = sorted(stocks, key=lambda x: x['w'] * x['h'])
         for s in sorted_stocks:
-            temp_packer.add_bin(s['w'], s['h'], count=float('inf'))
+            packer_engine.add_bin(s['w'], s['h'], count=100)  # สมมติว่าแต่ละไซส์มี 100 แผ่น
 
-        for p in current_pieces:
-            temp_packer.add_rect(p['w'] + allowance, p['h'] + allowance)
+        # ใส่ชิ้นงาน
+        for i, p in enumerate(current_pieces):
+            packer_engine.add_rect(p['w'] + allowance, p['h'] + allowance, rid=i)
 
-        temp_packer.pack()
+        packer_engine.pack()
 
-        # คำนวณหาความคุ้มค่าของรอบนี้
-        total_used_area = 0
-        total_bin_area = 0
+        # คำนวณผลลัพธ์ของรอบนี้
         current_results = []
+        total_bin_area = 0
+        total_used_area = 0
 
-        for b in temp_packer:
+        for b in packer_engine:
             if len(b) > 0:
                 bin_area = b.width * b.height
+                # หักระยะเผื่อออกเพื่อหาพื้นที่ชิ้นงานจริง
                 used_area_in_bin = sum((r.width - allowance) * (r.height - allowance) for r in b)
-                total_used_area += used_area_in_bin
+
                 total_bin_area += bin_area
+                total_used_area += used_area_in_bin
+
                 current_results.append({
                     'width': b.width,
                     'height': b.height,
@@ -72,12 +76,12 @@ def run_simulation(stocks, pieces, allowance, trials=50):
                     'rects': [{'w': r.width - allowance, 'h': r.height - allowance} for r in b]
                 })
 
-        current_waste = total_bin_area - total_used_area
-
-        # เก็บผลลัพธ์ที่ดีที่สุด (เหลือเศษน้อยที่สุด)
-        if current_waste < min_total_waste:
-            min_total_waste = current_waste
-            best_overall_results = current_results
+        if current_results:
+            current_waste = total_bin_area - total_used_area
+            # เก็บผลที่ดีที่สุดไว้
+            if current_waste < min_total_waste:
+                min_total_waste = current_waste
+                best_overall_results = current_results
 
         my_bar.progress((trial + 1) / trials, text=progress_text)
 
@@ -95,8 +99,9 @@ if check_password():
         st.session_state.projects = [{'name': 'ชุดงานที่ 1', 'items': [{'w': 20.0, 'h': 20.0, 'qty': 1}]}]
 
     with st.sidebar:
-        st.title("📦 คลังกระจก")
+        st.title("⚙️ คลังกระจก")
         allowance = st.number_input("ระยะเผื่อหัก (นิ้ว)", value=0.125, format="%.4f")
+        st.divider()
         for si, s in enumerate(st.session_state.stocks):
             with st.container(border=True):
                 c1, c2, c3 = st.columns([0.4, 0.4, 0.2])
@@ -105,10 +110,9 @@ if check_password():
                 if c3.button("❌", key=f"del_s_{si}"):
                     st.session_state.stocks.pop(si);
                     st.rerun()
-        st.button("➕ เพิ่มแผ่นคลัง", on_click=lambda: st.session_state.stocks.append({'w': 36.0, 'h': 72.0}))
+        st.button("➕ เพิ่มขนาดคลัง", on_click=lambda: st.session_state.stocks.append({'w': 36.0, 'h': 72.0}))
 
-    st.title("🖼️ GlaCal: ระบบคำนวณแบบจำลองสถิติ (Best Overall)")
-    st.info("💡 ระบบจะจำลองการวาง 50 รูปแบบที่แตกต่างกัน เพื่อหาทางเลือกที่ประหยัดเนื้อกระจกมากที่สุด")
+    st.title("🖼️ GlaCal Master: ระบบคำนวณแบบสถิติที่ดีที่สุด")
 
     for p_idx, proj in enumerate(st.session_state.projects):
         with st.container(border=True):
@@ -124,11 +128,16 @@ if check_password():
                         proj['items'].pop(i);
                         st.rerun()
 
-            if st.button(f"🚀 คำนวณหาจุดคุ้มค่าที่สุด", key=f"calc_{p_idx}", type="primary"):
+            c_btn1, _ = st.columns([0.15, 0.85])
+            with c_btn1:
+                if st.button("➕ เพิ่มชิ้นงาน", key=f"add_it_{p_idx}"):
+                    proj['items'].append({'w': 10.0, 'h': 10.0, 'qty': 1});
+                    st.rerun()
+
+            if st.button(f"🚀 เริ่มคำนวณ (Simulate 50 รอบ)", key=f"calc_{p_idx}", type="primary"):
                 stocks_data = st.session_state.stocks
                 pieces_data = [{'w': it['w'], 'h': it['h']} for it in proj['items'] for _ in range(int(it['qty']))]
 
-                # รันการจำลอง 50 รอบเพื่อหาผลลัพธ์ที่ดีที่สุด
                 results = run_simulation(stocks_data, pieces_data, allowance, trials=50)
 
                 if results:
@@ -137,17 +146,17 @@ if check_password():
                     overall_efficiency = (total_used_all / total_area_all) * 100
 
                     st.success(
-                        f"📊 ผลการจำลองที่ดีที่สุด: ใช้ {len(results)} แผ่น | ความคุ้มค่ารวม {overall_efficiency:.1f}%")
+                        f"📊 ผลลัพธ์ที่ดีที่สุด: ใช้ {len(results)} แผ่น | ความคุ้มค่ารวม {overall_efficiency:.1f}%")
 
                     res_grid = st.columns(3)
                     for idx, s in enumerate(results):
                         with res_grid[idx % 3]:
                             with st.expander(f"แผ่นที่ {idx + 1}: {s['width']}x{s['height']}", expanded=True):
                                 eff = (s['used_area'] / (s['width'] * s['height'])) * 100
-                                st.write(f"📊 ประสิทธิภาพแผ่นนี้: **{eff:.1f}%**")
+                                st.write(f"📊 ประสิทธิภาพ: **{eff:.1f}%**")
                                 st.write(f"♻️ เศษเหลือ: **{(s['width'] * s['height'] - s['used_area']):.2f}** ตร.นิ้ว")
                                 st.progress(min(eff / 100, 1.0))
                                 for p in s['rects']:
                                     st.code(f"✂️ {p['w']} x {p['h']} นิ้ว")
                 else:
-                    st.error("❌ ไม่สามารถคำนวณได้ โปรดเช็คขนาดชิ้นงาน")
+                    st.error("❌ ไม่พบรูปแบบการวางที่เหมาะสม โปรดตรวจสอบขนาดชิ้นงานเทียบกับคลัง")
