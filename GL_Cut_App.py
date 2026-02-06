@@ -2,7 +2,7 @@ import streamlit as st
 from rectpack import newPacker
 
 # --- 1. ระบบรหัสผ่าน ---
-PASSWORD = "glass_password"
+PASSWORD = "CK3006"
 
 
 def check_password():
