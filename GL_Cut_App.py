@@ -11,7 +11,7 @@ def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if not st.session_state.authenticated:
-        st.title("🔒 GlaCal Master (Big-Sheet First)")
+        st.title("🔒 GlaCal Master (Big-Sheet Priority)")
         pwd = st.text_input("รหัสผ่าน", type="password")
         if st.button("เข้าสู่ระบบ"):
             if pwd == PASSWORD:
@@ -23,32 +23,32 @@ def check_password():
     return True
 
 
-# --- 2. ฟังก์ชันจำลองการตัด (บังคับใช้แผ่นใหญ่ก่อนเสมอ) ---
+# --- 2. ฟังก์ชันจำลองการตัด (เน้นแผ่นใหญ่เป็นอันดับแรก) ---
 def run_simulation_big_first(stocks, pieces, allowance, trials=50):
     best_overall_results = None
     min_total_waste = float('inf')
 
-    progress_text = "กำลังคำนวณ... (เน้นแผ่นใหญ่เป็นลำดับแรก)"
+    progress_text = "กำลังคำนวณ... (บังคับเลือกใช้แผ่นใหญ่ก่อน)"
     my_bar = st.progress(0, text=progress_text)
 
-    # กฎเหล็ก: เรียงลำดับคลังจาก "ใหญ่สุดไปเล็กสุด"
-    # และใช้ Algorithm ที่เน้นเลือกแผ่นแรกๆ ในรายการ (Large Bins) ก่อน
+    # เรียงคลังจาก "ใหญ่สุดไปเล็กสุด" (Strict Priority)
     priority_stocks = sorted(stocks, key=lambda x: x['w'] * x['h'], reverse=True)
 
     for trial in range(trials):
         current_pieces = pieces.copy()
-        random.shuffle(current_pieces)  # สลับชิ้นงานเพื่อหาจุดที่ยัดลงแผ่นใหญ่ได้มากที่สุด
+        random.shuffle(current_pieces)
 
-        # ใช้โหมด Offline และเลือก Bin แบบ FirstFit (ซึ่งเราเรียงแผ่นใหญ่ไว้หน้าสุดแล้ว)
+        # ใช้ PackingBin.Global เพื่อให้ระบบพิจารณา Bin ตามลำดับที่เราใส่เข้าไป (ซึ่งเราเรียงแผ่นใหญ่ไว้ก่อน)
         packer_engine = newPacker(
             mode=packer.PackingMode.Offline,
-            bin_algo=packer.PackingBin.Bff,  # Big First Fit
+            bin_algo=packer.PackingBin.Global,
             pack_algo=packer.MaxRectsBssf,
             rotation=True
         )
 
+        # เพิ่มแผ่นใหญ่เข้าสู่ระบบตามลำดับความสำคัญ
         for s in priority_stocks:
-            # เพิ่มแผ่นใหญ่เข้าสู่ระบบก่อน
+            # ใส่จำนวนแผ่นเผื่อไว้เพื่อให้ระบบเลือกใช้ไซส์ใหญ่จนกว่าจะหมด/ใส่ไม่ได้
             packer_engine.add_bin(s['w'], s['h'], count=100)
 
         for i, p in enumerate(current_pieces):
@@ -76,9 +76,7 @@ def run_simulation_big_first(stocks, pieces, allowance, trials=50):
                 })
 
         if current_results:
-            # คำนวณเศษรวม
             current_waste = total_bin_area - total_used_area
-            # ตัดสินใจเลือกแผนการตัดที่เหลือเศษน้อยที่สุดจาก 50 รอบการจำลอง
             if current_waste < min_total_waste:
                 min_total_waste = current_waste
                 best_overall_results = current_results
@@ -110,10 +108,10 @@ if check_password():
                 if c3.button("❌", key=f"del_s_{si}"):
                     st.session_state.stocks.pop(si);
                     st.rerun()
-        st.button("➕ เพิ่มแผ่นคลัง", on_click=lambda: st.session_state.stocks.append({'w': 36.0, 'h': 72.0}))
+        st.button("➕ เพิ่มขนาดคลัง", on_click=lambda: st.session_state.stocks.append({'w': 36.0, 'h': 72.0}))
 
-    st.title("🖼️ GlaCal Master: ระบบล็อคการใช้แผ่นใหญ่เป็นลำดับแรก")
-    st.info("💡 หากมีผลการคำนวณที่เท่ากัน ระบบจะตัดสินใจใช้แผ่นกระจกที่มีขนาดพื้นที่มากที่สุดก่อนเสมอ")
+    st.title("🖼️ GlaCal Master: ระบบล็อคการใช้แผ่นใหญ่ก่อนเสมอ")
+    st.info("💡 ระบบจะจัดลำดับความสำคัญโดยเลือกใช้กระจกแผ่นใหญ่ที่สุดในคลังก่อน หากชิ้นงานสามารถวางได้")
 
     for p_idx, proj in enumerate(st.session_state.projects):
         with st.container(border=True):
@@ -135,14 +133,14 @@ if check_password():
                     proj['items'].append({'w': 10.0, 'h': 10.0, 'qty': 1});
                     st.rerun()
 
-            if st.button(f"🚀 เริ่มคำนวณ (Big First)", key=f"calc_{p_idx}", type="primary"):
+            if st.button(f"🚀 เริ่มคำนวณ (บังคับใช้แผ่นใหญ่)", key=f"calc_{p_idx}", type="primary"):
                 stocks_data = st.session_state.stocks
                 pieces_data = [{'w': it['w'], 'h': it['h']} for it in proj['items'] for _ in range(int(it['qty']))]
 
                 results = run_simulation_big_first(stocks_data, pieces_data, allowance, trials=50)
 
                 if results:
-                    st.success(f"📊 ผลลัพธ์: ใช้กระจก {len(results)} แผ่น")
+                    st.success(f"📊 ผลลัพธ์: ใช้กระจกทั้งหมด {len(results)} แผ่น")
                     res_grid = st.columns(3)
                     for idx, s in enumerate(results):
                         with res_grid[idx % 3]:
@@ -154,4 +152,4 @@ if check_password():
                                 for p in s['rects']:
                                     st.code(f"✂️ {p['w']} x {p['h']} นิ้ว")
                 else:
-                    st.error("❌ ไม่พบรูปแบบการวางที่เหมาะสม")
+                    st.error("❌ ไม่สามารถคำนวณได้")
