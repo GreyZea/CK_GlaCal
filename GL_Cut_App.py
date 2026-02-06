@@ -1,16 +1,15 @@
 import streamlit as st
 from rectpack import newPacker
-import rectpack.packer as packer
 
 # --- 1. ระบบรหัสผ่าน ---
-PASSWORD = "CK3006"
+PASSWORD = "glass_password"
 
 
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if not st.session_state.authenticated:
-        st.title("🔒 GlaCal Master (Pure Cut)")
+        st.title("🔒 GlaCal Master (Stock Optimization)")
         pwd = st.text_input("กรุณาใส่รหัสผ่าน", type="password")
         if st.button("เข้าสู่ระบบ"):
             if pwd == PASSWORD:
@@ -22,20 +21,19 @@ def check_password():
     return True
 
 
-# --- 2. ฟังก์ชันคำนวณ (ลองทุกแผ่นในสต็อก - ไม่เผื่อรอยตัด) ---
-def calculate_pure_mix(stocks, pieces):
-    # เรียงชิ้นงานจากพื้นที่มากไปน้อย
+# --- 2. ฟังก์ชันคำนวณ (เลือกแผ่นที่เหลือเศษน้อยที่สุดต่อแผ่น) ---
+def calculate_optimized_stock(stocks, pieces):
     remaining_pieces = sorted(pieces, key=lambda x: x['w'] * x['h'], reverse=True)
     results = []
 
     while remaining_pieces:
-        best_sheet = None
+        best_sheet_variant = None
         best_packed_indices = []
-        max_used_area = -1
+        highest_efficiency = -1
 
-        # วนลูปทดสอบแผ่นสต็อกทุกขนาดที่มี
-        for s_idx, s_item in enumerate(stocks):
-            # ลองทั้งแนวตั้งและแนวนอนของแผ่นกระจก
+        # ลอง "ชิ้นงานที่เหลือทั้งหมด" กับ "สต็อกทุกขนาด"
+        for s_item in stocks:
+            # ลองทั้งแนวตั้งและแนวนอนของแผ่นสต็อก
             for sw, sh in [(s_item['w'], s_item['h']), (s_item['h'], s_item['w'])]:
                 temp_packer = newPacker(rotation=True)
                 temp_packer.add_bin(sw, sh)
@@ -45,27 +43,30 @@ def calculate_pure_mix(stocks, pieces):
 
                 temp_packer.pack()
 
-                # ตรวจสอบผลการยัดงานในแผ่นทดลองนี้
                 if len(temp_packer) > 0:
                     b = temp_packer[0]
+                    # คำนวณพื้นที่ที่ใช้จริงในแผ่นนี้
                     current_used_area = sum(r.width * r.height for r in b)
+                    # คำนวณความคุ้มค่า (พื้นที่ใช้ / พื้นที่แผ่น)
+                    efficiency = current_used_area / (sw * sh)
 
-                    # ถ้าแผ่นไซส์นี้ยัดงานได้พื้นที่คุ้มกว่าเดิม ให้บันทึกไว้
-                    if current_used_area > max_used_area:
-                        max_used_area = current_used_area
+                    # หัวใจสำคัญ: เลือกแผ่นที่ Efficiency สูงสุด (เหลือเศษน้อยที่สุดในตัวมันเอง)
+                    # ไม่ใช่แค่แผ่นที่ยัดงานได้เยอะที่สุด
+                    if efficiency > highest_efficiency:
+                        highest_efficiency = efficiency
                         best_packed_indices = [r.rid for r in b]
-                        best_sheet = {
+                        best_sheet_variant = {
                             'sw': sw, 'sh': sh,
+                            'eff': efficiency,
                             'used_area': current_used_area,
                             'rects': [{'w': r.width, 'h': r.height} for r in b]
                         }
 
-        if not best_sheet or not best_packed_indices:
-            break  # ชิ้นงานที่เหลือใหญ่เกินแผ่นสต็อกทุกแผ่น
+        if not best_sheet_variant:
+            break
 
-        results.append(best_sheet)
-
-        # ลบชิ้นงานที่วางไปแล้วออกจากรายการรอตัด
+        results.append(best_sheet_variant)
+        # ลบชิ้นงานที่วางไปแล้วออก
         for idx in sorted(best_packed_indices, reverse=True):
             remaining_pieces.pop(idx)
 
@@ -73,19 +74,16 @@ def calculate_pure_mix(stocks, pieces):
 
 
 # --- 3. UI ---
-st.set_page_config(page_title="GlaCal Pure Pro", layout="wide")
+st.set_page_config(page_title="GlaCal Stock Optimizer", layout="wide")
 
 if check_password():
-    # เตรียมข้อมูลตั้งต้น
     if 'stocks' not in st.session_state:
-        st.session_state.stocks = [{'w': 48.0, 'h': 96.0}]
+        st.session_state.stocks = [{'w': 48.0, 'h': 96.0}, {'w': 30.0, 'h': 30.0}]
     if 'projects' not in st.session_state:
-        st.session_state.projects = [{'name': 'ชุดงานที่ 1', 'items': [{'w': 20.0, 'h': 20.0, 'qty': 5}]}]
+        st.session_state.projects = [{'name': 'งานตัดชุดที่ 1', 'items': [{'w': 20.0, 'h': 20.0, 'qty': 2}]}]
 
-    # --- Sidebar: จัดการสต็อก ---
     with st.sidebar:
         st.title("📦 คลังกระจก (Stock)")
-        st.caption("หน่วยวัด: นิ้ว")
         for si, s in enumerate(st.session_state.stocks):
             with st.container(border=True):
                 c1, c2, c3 = st.columns([0.4, 0.4, 0.2])
@@ -94,16 +92,14 @@ if check_password():
                 if c3.button("❌", key=f"del_s_{si}"):
                     st.session_state.stocks.pop(si);
                     st.rerun()
-        st.button("➕ เพิ่มขนาดคลัง", on_click=lambda: st.session_state.stocks.append({'w': 36.0, 'h': 72.0}))
+        st.button("➕ เพิ่มขนาดคลัง", on_click=lambda: st.session_state.stocks.append({'w': 20.0, 'h': 20.0}))
 
-    # --- Main: จัดการชิ้นงาน ---
-    st.title("🖼️ GlaCal: คำนวณตัดกระจก (Pure Efficiency)")
-    st.info("💡 ระบบจะเลือกแผ่นจากคลังที่ยัดชิ้นงานได้แน่นที่สุดทีละแผ่น โดยไม่คิดรอยตัด")
+    st.title("🖼️ GlaCal Master: ระบบบริหารสต็อก (เลือกแผ่นที่ฟิตที่สุด)")
+    st.info("💡 ระบบจะเปรียบเทียบทุกขนาดในคลัง เพื่อเลือกแผ่นที่ 'เหลือเศษน้อยที่สุด' มาใช้ก่อน")
 
     for p_idx, proj in enumerate(st.session_state.projects):
         with st.container(border=True):
             proj['name'] = st.text_input("ชื่อโปรเจกต์", value=proj['name'], key=f"pname_{p_idx}")
-            st.write("📝 **รายการชิ้นงาน (กว้าง x สูง)**")
 
             for i, it in enumerate(proj['items']):
                 with st.container(border=True):
@@ -115,16 +111,13 @@ if check_password():
                         proj['items'].pop(i);
                         st.rerun()
 
-            col_a, col_b = st.columns([0.15, 0.85])
-            with col_a:
-                if st.button("➕ เพิ่มชิ้นงาน", key=f"add_it_{p_idx}"):
-                    proj['items'].append({'w': 10.0, 'h': 10.0, 'qty': 1});
-                    st.rerun()
+            if st.button("➕ เพิ่มชิ้นงาน", key=f"add_it_{p_idx}"):
+                proj['items'].append({'w': 10.0, 'h': 10.0, 'qty': 1});
+                st.rerun()
 
-            if st.button(f"🚀 คำนวณ (ประหยัดแผ่นสูงสุด)", key=f"calc_{p_idx}", type="primary"):
+            if st.button(f"🚀 คำนวณ (เลือกแผ่นที่ประหยัดที่สุด)", key=f"calc_{p_idx}", type="primary"):
                 pieces_data = [{'w': it['w'], 'h': it['h']} for it in proj['items'] for _ in range(int(it['qty']))]
-
-                results, rem = calculate_pure_mix(st.session_state.stocks, pieces_data)
+                results, rem = calculate_optimized_stock(st.session_state.stocks, pieces_data)
 
                 if results:
                     st.success(f"📊 สรุป: ใช้กระจกทั้งหมด {len(results)} แผ่น")
@@ -132,14 +125,8 @@ if check_password():
                     for idx, s in enumerate(results):
                         with res_grid[idx % 3]:
                             with st.expander(f"แผ่นที่ {idx + 1}: {s['sw']}x{s['sh']}", expanded=True):
-                                area = s['sw'] * s['sh']
-                                eff = (s['used_area'] / area) * 100
-                                st.write(f"📊 ประสิทธิภาพ: **{eff:.1f}%**")
-                                st.write(f"♻️ เศษเหลือ: **{(area - s['used_area']):.2f}** ตร.นิ้ว")
-                                st.progress(min(eff / 100, 1.0))
+                                st.write(f"📊 ความคุ้มค่า: **{s['eff'] * 100:.1f}%**")
+                                st.write(f"♻️ เศษเหลือ: **{(s['sw'] * s['sh'] - s['used_area']):.2f}** ตร.นิ้ว")
+                                st.progress(min(s['eff'], 1.0))
                                 for p in s['rects']:
                                     st.code(f"✂️ {p['w']} x {p['h']} นิ้ว")
-                    if rem:
-                        st.error(f"⚠️ เหลือ {len(rem)} ชิ้นที่ใหญ่เกินกว่ากระจกในสต็อก")
-                else:
-                    st.error("❌ ไม่สามารถคำนวณได้ ตรวจสอบข้อมูลชิ้นงานและสต็อก")
