@@ -78,7 +78,7 @@ st.set_page_config(page_title="GlaCal Stock Optimizer", layout="wide")
 
 if check_password():
     if 'stocks' not in st.session_state:
-        st.session_state.stocks = [{'w': 48.0, 'h': 96.0}, {'w': 30.0, 'h': 30.0}]
+        st.session_state.stocks = [{'w': 84.00, 'h': 120.00}, {'w': 84.00, 'h': 96.00}, {'w': 84.00, 'h': 84.00}, {'w': 72.0, 'h': 120.0}, {'w': 72.0, 'h': 96.0}, {'w': 72.0, 'h': 84.0}, {'w': 72.0, 'h': 72.0}, {'w': 60.0, 'h': 96.0}, {'w': 60.0, 'h': 84.0}, {'w': 60.0, 'h': 72.0}, {'w': 48.0, 'h': 96.0}, {'w': 48.0, 'h': 84.0}, {'w': 42.0, 'h': 84.0}, {'w': 36.0, 'h': 84.0}]
     if 'projects' not in st.session_state:
         st.session_state.projects = [{'name': 'งานตัดชุดที่ 1', 'items': [{'w': 20.0, 'h': 20.0, 'qty': 2}]}]
 
